@@ -30,9 +30,9 @@ pagina = st.sidebar.radio(
 # 🗺️ Kaart van laadpalen
 # -------------------------
 if pagina == "🗺️ Kaart van laadpalen":
-    st.title("🚗 Laadpalenkaart Nederland")
+    st.title("🗺️ Laadpalenkaart Nederland")
     st.markdown(
-        "Selecteer één provincie of 'Alle provincies'. De kaart zoomt automatisch in. Data is gecachet voor snellere herlaad.")
+        "Selecteer provincies via dropdown menu of layer control.")
 
 
     @st.cache_data(ttl=86400, show_spinner="Data ophalen van OpenChargeMap...")
@@ -201,6 +201,9 @@ elif pagina == "📊 Analyse van laadsessies":
     if 'start_time' in charging.columns:
         charging['start_time'] = pd.to_datetime(charging['start_time'], errors='coerce')
 
+    # Voor de metingen: bewaar de 'rows_before' vóór de filtering
+    rows_before = len(charging)
+
     # Opschonen (IQR outliers op energy_delivered)
     if "energy_delivered [kWh]" in charging.columns:
         E_q75 = charging["energy_delivered [kWh]"].quantile(0.75)
@@ -208,7 +211,12 @@ elif pagina == "📊 Analyse van laadsessies":
         E_iqr = E_q75 - E_q25
         upper = E_q75 + 1.5 * E_iqr
         lower = E_q25 - 1.5 * E_iqr
-        charging = charging[(charging["energy_delivered [kWh]"] > lower) & (charging["energy_delivered [kWh]"] < upper)]
+        # Toepassen filter
+        charging = charging[
+            (charging["energy_delivered [kWh]"] > lower) & (charging["energy_delivered [kWh]"] < upper)].copy()
+
+    rows_after = len(charging)
+    removed = rows_before - rows_after
 
     # Feature engineering
     charging['charging_duration'] = pd.to_timedelta(charging.get('charging_duration', pd.NaT), errors='coerce')
@@ -269,11 +277,13 @@ elif pagina == "📊 Analyse van laadsessies":
         title='Aantal laadsessies per uur (weekdag vs weekend)'
     )
     # Zorg dat trace-namen consistent zijn (volgorde kan wisselen)
+    name_map = {'Werkdagen': 'Werkdagen', 'Weekend': 'Weekend'}
     for tr in fig2.data:
         if 'Weekend' in tr.name:
-            tr.name = 'Weekend'
+            tr.name = name_map['Weekend']
         elif 'Werk' in tr.name or 'Werkdagen' in tr.name:
-            tr.name = 'Werkdagen'
+            tr.name = name_map['Werkdagen']
+
     fig2.update_xaxes(dtick=1, title='Uur van de dag')
     fig2.update_yaxes(title='Aantal laadsessies')
     fig2.update_layout(
@@ -319,18 +329,39 @@ elif pagina == "📊 Analyse van laadsessies":
         )]
     )
 
-    # --- Tonen ---
+    # --- Tonen Visualisaties ---
     st.plotly_chart(fig1, use_container_width=True)
     st.plotly_chart(fig2, use_container_width=True)
     st.plotly_chart(fig3, use_container_width=True)
 
+    # --- Nieuwe Tabellen (onder de plots) ---
+    st.markdown("---")
+    st.markdown("## Overzicht schoonmaak-acties")
 
+    # 1. Rijen telling metrics
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Rijen vóór outlier-filter", rows_before)
+    c2.metric("Rijen na outlier-filter", rows_after)
+    c3.metric("Verwijderd (outliers)", removed)
+
+    st.markdown("### Nieuwe (afgeleide) kolommen")
+
+    # 2. Afgeleide kolommen tabel
+    desc = pd.DataFrame([
+        {"Nieuwe kolom": "date", "Omschrijving": "Datum (YYYY-MM-DD) uit start_time"},
+        {"Nieuwe kolom": "start_hour", "Omschrijving": "Uur (0–23) van start_time"},
+        {"Nieuwe kolom": "weekday", "Omschrijving": "Dagnaam van start_time"},
+        {"Nieuwe kolom": "month", "Omschrijving": "Maandnaam van start_time"},
+        {"Nieuwe kolom": "is_weekend", "Omschrijving": "Boolean: za/zo = True, anders False"},
+        {"Nieuwe kolom": "charging_duration_hours", "Omschrijving": "Laadduur in uren (timedelta → uren)"},
+        {"Nieuwe kolom": "avg_power_kW", "Omschrijving": "Gemiddeld vermogen = kWh / uren (filtered)"},
+    ])
+    st.dataframe(desc, use_container_width=True)
 # -------------------------
-# 🚗 Analyse van voertuigdata (cars.pkl)
+# 🚗 Analyse van voertuigdata (cars.pkl) - GEUPDATE SECTIE
 # -------------------------
 elif pagina == "🚗 Analyse van voertuigdata":
     st.title("🚗 Analyse van voertuigdata")
-    st.markdown("Visualisaties van voertuigdata uit 'cars.pkl'.")
 
 
     @st.cache_data
@@ -348,131 +379,150 @@ elif pagina == "🚗 Analyse van voertuigdata":
 
     cars = load_pickle(data_path)
 
-    # --- Data opschonen en voorbereiden (uit de tweede code) ---
-    # os.chdir('C:\\school\\Datascience\\laadpalen_elektrisch_vervoer') # Niet nodig in Streamlit
-
-    # Typeconversies (kolommen in de tweede code)
+    # ---------- SCHOONMAAK ----------
+    cars = cars.copy()
+    # 1) Typecasts & trim
     if 'merk' in cars.columns:
         cars['merk'] = cars['merk'].astype(str).str.strip()
-    if "kenteken" in cars.columns:
-        cars["kenteken"] = cars["kenteken"].astype("string")
-    if 'massa_ledig_voertuig' in cars.columns:
-        cars['massa_ledig_voertuig'] = cars['massa_ledig_voertuig'].astype('float64')
-    if "massa_rijklaar" in cars.columns:
-        cars["massa_rijklaar"] = cars["massa_rijklaar"].astype("float64")
-    if "wielbasis" in cars.columns:
-        cars["wielbasis"] = cars["wielbasis"].astype("float64")
-    if 'catalogusprijs' in cars.columns:
-        cars['catalogusprijs'] = cars['catalogusprijs'].astype('float64')
-    if 'aantal_deuren' in cars.columns:
-        cars['aantal_deuren'] = cars['aantal_deuren'].astype('Int64')
-    if 'aantal_wielen' in cars.columns:
-        cars['aantal_wielen'] = cars['aantal_wielen'].astype('Int64')
-    if "lengte" in cars.columns:
-        cars["lengte"] = cars["lengte"].astype("float64")
-    if "breedte" in cars.columns:
-        cars["breedte"] = cars["breedte"].astype("float64")
-    if "hoogte_voertuig" in cars.columns:
-        cars["hoogte_voertuig"] = cars["hoogte_voertuig"].astype("float64")
 
-    # Drop kolom
-    if 'bruto_bpm' in cars.columns:
-        cars = cars.drop('bruto_bpm', axis=1)
+    typecasts_applied = {
+        "kenteken": "string",
+        "massa_ledig_voertuig": "float64",
+        "massa_rijklaar": "float64",
+        "wielbasis": "float64",
+        "catalogusprijs": "float64",
+        "aantal_deuren": "Int64",
+        "aantal_wielen": "Int64",
+        "lengte": "float64",
+        "breedte": "float64",
+        "hoogte_voertuig": "float64",
+    }
+    for c, t in typecasts_applied.items():
+        if c in cars.columns:
+            if t.lower() == "string":
+                cars[c] = cars[c].astype("string")
+            else:
+                cars[c] = pd.to_numeric(cars[c], errors="coerce").astype(t, errors="ignore")
 
-    # Imputatie van NaN-waarden (vereenvoudigd voor de app)
-    # Dit stuk wordt weggelaten of vervangen door een snelle fillna,
-    # want de imputatie-analyse is meer voor data-cleaning scripts dan de app-display.
+    # 2) Drop kolommen
+    dropped_columns = []
+    if "bruto_bpm" in cars.columns:
+        cars = cars.drop("bruto_bpm", axis=1)
+        dropped_columns.append("bruto_bpm")
 
-    # We vullen de NaNs nu in met de mediaan/modus, zoals in de originele code
+    # 3) NaN-imputatie per type kolom (mediaan / mediane datum / modus)
+    overzicht = []
     for col in cars.columns:
-        if cars[col].isna().sum() > 0:
-            if pd.api.types.is_numeric_dtype(cars[col]):
-                cars[col] = cars[col].fillna(cars[col].median())
-            elif pd.api.types.is_datetime64_any_dtype(cars[col]) or (
-                    "datum" in col.lower() and cars[col].dtype == "object"):
-                cars[col] = pd.to_datetime(cars[col], errors="coerce").fillna(
-                    pd.to_datetime(cars[col], errors="coerce").median())
-            elif pd.api.types.is_object_dtype(cars[col]) or pd.api.types.is_string_dtype(cars[col]):
-                if not cars[col].mode(dropna=True).empty:
-                    cars[col] = cars[col].fillna(cars[col].mode(dropna=True)[0])
+        na_before = cars[col].isna().sum()
+        ingevulde_waarde = None
+        methode = "geen"
 
-    # Outlier verwijdering (IQR)
+        if pd.api.types.is_numeric_dtype(cars[col]):
+            median_value = cars[col].median()
+            cars[col] = cars[col].fillna(median_value)
+            ingevulde_waarde = median_value
+            methode = "mediaan"
+
+        elif pd.api.types.is_datetime64_any_dtype(cars[col]) or (
+                cars[col].dtype == "object" and "datum" in col.lower()):
+            cars[col] = pd.to_datetime(cars[col], errors="coerce")
+            median_date = cars[col].median()
+            cars[col] = cars[col].fillna(median_date)
+            ingevulde_waarde = median_date
+            methode = "mediane datum"
+
+        elif pd.api.types.is_object_dtype(cars[col]) or pd.api.types.is_string_dtype(cars[col]):
+            mode_series = cars[col].mode(dropna=True)
+            if not mode_series.empty:
+                mode_value = mode_series.iloc[0]
+                cars[col] = cars[col].fillna(mode_value)
+                ingevulde_waarde = mode_value
+                methode = "modus"
+
+        na_after = cars[col].isna().sum()
+
+
+        # Optioneel: nette representatie voor datetime
+        def _fmt(v):
+            if isinstance(v, pd.Timestamp):
+                return v.strftime("%Y-%m-%d")
+            return v
+
+
+        overzicht.append({
+            "Kolom": col,
+            "Type": str(cars[col].dtype),
+            "NaN vóór invullen": int(na_before),
+            "Methode invullen": methode,
+            # "NaN ná invullen": int(na_after), # <-- DEZE IS NU VERWIJDERD
+        })
+
+    overzicht_df = pd.DataFrame(overzicht).sort_values("NaN vóór invullen", ascending=False).reset_index(drop=True)
+
+    # 4) Outlier-filter (IQR 1.5x) op alle numerieke kolommen (behalve aantal_wielen)
     numeric_cols = cars.select_dtypes(include=['number']).columns.tolist()
-    cols_to_clean = [c for c in numeric_cols if c != "aantal_wielen" and c in cars.columns]  # check of kolom bestaat
-
+    cols_for_outliers = [c for c in numeric_cols if c != "aantal_wielen"]
     mask = pd.Series(True, index=cars.index)
-    for col in cols_to_clean:
-        s = cars[col]
+    for col in cols_for_outliers:
+        s = pd.to_numeric(cars[col], errors="coerce")
         s = s[np.isfinite(s)]
         if s.empty or s.nunique() < 2:
             continue
-        q1 = s.quantile(0.25)
-        q3 = s.quantile(0.75)
+        q1, q3 = s.quantile(0.25), s.quantile(0.75)
         iqr = q3 - q1
-        lower = q1 - 1.5 * iqr
-        upper = q3 + 1.5 * iqr
+        lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
         mask &= (cars[col] >= lower) & (cars[col] <= upper)
+
+    rows_before = len(cars)
     cars_clean = cars[mask].copy()
+    rows_after = len(cars_clean)
+    outliers_removed = rows_before - rows_after
 
-    st.header("1. Voertuigregistratie over tijd")
-
-    # --- Voertuigregistratie per jaar en maand ---
-    cars_clean["datum_eerste_toelating"] = pd.to_datetime(cars_clean["datum_eerste_toelating"], format="%Y%m%d",
+    # 5) Datum + nieuwe kolommen
+    cars_clean["datum_eerste_toelating"] = pd.to_datetime(cars_clean.get("datum_eerste_toelating"), format="%Y%m%d",
                                                           errors="coerce")
     cars_clean = cars_clean.dropna(subset=["datum_eerste_toelating"])
-
     cars_clean["jaar"] = cars_clean["datum_eerste_toelating"].dt.year
     cars_clean["maand"] = cars_clean["datum_eerste_toelating"].dt.month
+    new_columns_added = ["jaar", "maand"]
 
+
+    # ---------- Grafieken (met cars_clean) - NU BOVEN ----------
+    st.markdown("## Visualisaties") # Grotere kop
+
+    # (1) Lijndiagram per jaar met dropdown
+    st.subheader("Voertuigregistratie per maand") # Subkop
     aantal_per_maand = (
         cars_clean.groupby(["jaar", "maand"])
         .size()
         .reset_index(name="aantal_voertuigen")
         .sort_values(["jaar", "maand"])
     )
-
-    fig_reg = go.Figure()
+    fig1 = go.Figure()
     jaren = aantal_per_maand["jaar"].unique()
-
     if len(jaren) > 0:
         for jaar in jaren:
             df_jaar = aantal_per_maand[aantal_per_maand["jaar"] == jaar]
-            fig_reg.add_trace(
-                go.Scatter(
-                    x=df_jaar["maand"],
-                    y=df_jaar["aantal_voertuigen"],
-                    mode="lines+markers",
-                    name=str(jaar),
-                    visible=(jaar == jaren[-1])
-                )
-            )
+            fig1.add_trace(go.Scatter(
+                x=df_jaar["maand"], y=df_jaar["aantal_voertuigen"],
+                mode="lines+markers", name=str(jaar),
+                visible=(jaar == jaren[-1])  # start met laatste jaar
+            ))
 
         dropdown_knoppen = []
         for i, jaar in enumerate(jaren):
-            visible = [False] * len(jaren)
-            visible[i] = True
-            knop = dict(
-                label=str(jaar),
-                method="update",
-                args=[{"visible": visible},
-                      {"title": f"Aantal voertuigen per maand in {jaar}"}]
-            )
-            dropdown_knoppen.append(knop)
+            vis = [False] * len(jaren);
+            vis[i] = True
+            dropdown_knoppen.append(dict(label=str(jaar), method="update", args=[{"visible": vis}]))
 
-        fig_reg.update_layout(
+        fig1.update_layout(
             title={'text': f"Aantal voertuigen per maand in {jaren[-1]}", 'x': 0.5, 'xanchor': 'center'},
-            xaxis_title="Maand",
-            yaxis_title="Aantal voertuigen",
-            updatemenus=[
-                dict(
-                    active=len(jaren) - 1,
-                    buttons=dropdown_knoppen,
-                    x=1.1,
-                    y=1.15,
-                    xanchor="right",
-                    yanchor="top"
-                )
-            ],
+            xaxis_title="Maand", yaxis_title="Aantal voertuigen",
+            updatemenus=[dict(
+                type='dropdown', direction='down', showactive=True,
+                active=len(jaren) - 1, buttons=dropdown_knoppen,
+                x=0.0, xanchor="left", y=1.15, yanchor="top",
+            )],
             plot_bgcolor="white",
             xaxis=dict(
                 tickmode="array",
@@ -482,113 +532,103 @@ elif pagina == "🚗 Analyse van voertuigdata":
             ),
             yaxis=dict(gridcolor="lightgray")
         )
-        st.plotly_chart(fig_reg, use_container_width=True)
+        st.plotly_chart(fig1, use_container_width=True)
     else:
         st.info("Geen geldige data gevonden voor voertuigregistratie.")
 
-    st.header("2. Distributie van voertuigmerken")
-
-    # --- Aantal voertuigen per merk ---
+    # (2) Bar per merk
+    st.subheader("Voertuigmerken") # Subkop
     if 'merk' in cars_clean.columns:
         merk_counts = cars_clean["merk"].value_counts().reset_index()
         merk_counts.columns = ["merk", "aantal"]
-
-        fig_merk = px.bar(
-            merk_counts,
-            x="merk",
-            y="aantal",
-            title="Aantal voertuigen per merk",
-            text="aantal",
-            color="merk"
+        fig2 = px.bar(
+            merk_counts, x="merk", y="aantal",
+            title="Aantal voertuigen per merk", text="aantal", color="merk"
         )
-
-        fig_merk.update_traces(textposition="outside")
-        fig_merk.update_layout(
+        fig2.update_traces(textposition="outside")
+        fig2.update_layout(
             title={'text': 'Aantal voertuigen per merk', 'x': 0.5, 'xanchor': 'center'},
-            xaxis_title="Merk",
-            yaxis_title="Aantal",
-            showlegend=False
+            xaxis_title="Merk", yaxis_title="Aantal",
+            showlegend=False, plot_bgcolor="white",
+            xaxis=dict(gridcolor="lightgray"), yaxis=dict(gridcolor="lightgray")
         )
-        st.plotly_chart(fig_merk, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True)
     else:
-        st.info("Kolom 'merk' niet gevonden in de data.")
+        st.info("Kolom 'merk' niet beschikbaar voor deze visualisatie.")
 
-    st.header("3. Wielbasis versus Rijklaar Massa")
-
-    # --- Scatterplot: Wielbasis vs Massa rijklaar ---
+    # (3) Scatter + toggle regressielijn
+    st.subheader("Wielbasis vs. Massa Rijklaar") # Subkop
     if "wielbasis" in cars_clean.columns and "massa_rijklaar" in cars_clean.columns and "merk" in cars_clean.columns:
-        # Zorg dat de kolommen numeriek zijn (opnieuw na cleaning)
         cars_clean["wielbasis"] = pd.to_numeric(cars_clean["wielbasis"], errors="coerce")
         cars_clean["massa_rijklaar"] = pd.to_numeric(cars_clean["massa_rijklaar"], errors="coerce")
 
-        fig_scatter = px.scatter(
-            cars_clean,
-            x="wielbasis",
-            y="massa_rijklaar",
-            color="merk",
+        fig3 = px.scatter(
+            cars_clean, x="wielbasis", y="massa_rijklaar", color="merk",
             title="Relatie tussen wielbasis en massa rijklaar per merk",
-            labels={
-                "wielbasis": "Wielbasis (cm)",
-                "massa_rijklaar": "Massa rijklaar (kg)",
-                "merk": "Merk"
-            },
+            labels={"wielbasis": "Wielbasis (cm)", "massa_rijklaar": "Massa rijklaar (kg)", "merk": "Merk"},
             hover_data=["handelsbenaming", "inrichting", "datum_eerste_toelating"]
         )
 
-        # Regressielijn over alle punten
         mask = cars_clean["wielbasis"].notna() & cars_clean["massa_rijklaar"].notna()
-        x = cars_clean.loc[mask, "wielbasis"].to_numpy()
-        y = cars_clean.loc[mask, "massa_rijklaar"].to_numpy()
-
-        if len(x) > 1:
-            coef = np.polyfit(x, y, 1)
-            poly_fn = np.poly1d(coef)
-
-            x_line = np.linspace(x.min(), x.max(), 100)
-            y_line = poly_fn(x_line)
-
-            num_scatter = len(fig_scatter.data)
-
-            # Voeg regressielijn toe (zichtbaar bij start)
-            fig_scatter.add_trace(go.Scatter(
-                x=x_line,
-                y=y_line,
-                mode="lines",
-                name="Trendlijn",
-                line=dict(width=2, dash="dash"),
-                visible=True
-            ))
-
-            # Stijl en dropdown menu
-            fig_scatter.update_traces(marker=dict(size=10, opacity=0.7), selector=dict(mode="markers"))
-            fig_scatter.update_layout(
-                legend_title_text="Merk",
-                plot_bgcolor="white",
-                xaxis=dict(showgrid=True, gridcolor="lightgray", title="Wielbasis (cm)"),
-                yaxis=dict(showgrid=True, gridcolor="lightgray", title="Massa rijklaar (kg)"),
-                title={'text': 'Relatie tussen wielbasis en massa rijklaar per merk', 'x': 0.5, 'xanchor': 'center'},
-                updatemenus=[dict(
-                    type='dropdown',
-                    direction='down',
-                    showactive=True,
-                    x=-0.3, xanchor='left',
-                    y=1.15, yanchor='top',
-                    buttons=[
-                        dict(
-                            label='Met regressielijn',
-                            method='update',
-                            args=[{'visible': [True] * num_scatter + [True]}]
-                        ),
-                        dict(
-                            label='Zonder regressielijn',
-                            method='update',
-                            args=[{'visible': [True] * num_scatter + [False]}]
-                        ),
-                    ]
-                )]
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
+        if mask.any():
+            x = cars_clean.loc[mask, "wielbasis"].to_numpy()
+            y = cars_clean.loc[mask, "massa_rijklaar"].to_numpy()
+            if len(x) > 1:  # Zorg voor minimaal 2 punten voor polyfit
+                coef = np.polyfit(x, y, 1)
+                poly_fn = np.poly1d(coef)
+                x_line = np.linspace(x.min(), x.max(), 100)
+                y_line = poly_fn(x_line)
+            else:
+                x_line = np.array([]);
+                y_line = np.array([])
         else:
-            st.info("Onvoldoende data beschikbaar om de scatterplot en trendlijn te tonen.")
+            x_line = np.array([]);
+            y_line = np.array([])
+
+        num_scatter = len(fig3.data)
+        fig3.add_trace(go.Scatter(
+            x=x_line, y=y_line, mode="lines", name="Trendlijn",
+            line=dict(width=2, dash="dash"), visible=True
+        ))
+        fig3.update_traces(marker=dict(size=8, opacity=0.7), selector=dict(mode="markers"))
+        fig3.update_layout(
+            legend_title_text="Merk", plot_bgcolor="white",
+            xaxis=dict(showgrid=True, gridcolor="lightgray", title="Wielbasis (cm)"),
+            yaxis=dict(showgrid=True, gridcolor="lightgray", title="Massa rijklaar (kg)"),
+            title={'text': 'Relatie tussen wielbasis en massa rijklaar per merk', 'x': 0.5, 'xanchor': 'center'},
+            updatemenus=[dict(
+                type='dropdown', direction='down', showactive=True,
+                x=0.0, xanchor='left', y=1.15, yanchor='top',
+                buttons=[
+                    dict(label='Met regressielijn', method='update', args=[{'visible': [True] * num_scatter + [True]}]),
+                    dict(label='Zonder regressielijn', method='update',
+                         args=[{'visible': [True] * num_scatter + [False]}]),
+                ],
+            )]
+        )
+        st.plotly_chart(fig3, use_container_width=True)
     else:
-        st.info("Niet alle benodigde kolommen ('wielbasis', 'massa_rijklaar', 'merk') zijn aanwezig in de data.")
+        st.info(
+            "Niet alle benodigde kolommen ('wielbasis', 'massa_rijklaar', 'merk') zijn beschikbaar voor deze visualisatie.")
+
+
+    # ---------- UI: overzicht schoonmaak, nu ONDER ----------
+    st.markdown("---")
+    st.markdown("## Overzicht schoonmaak-acties") # Grotere kop
+
+    # Tabel voor gedropte en nieuwe kolommen
+    drop_new_df = pd.DataFrame({
+        "Gedropte kolommen": [", ".join(dropped_columns) if dropped_columns else "—"],
+        "Nieuwe kolommen toegevoegd": [", ".join(new_columns_added)]
+    })
+    st.dataframe(drop_new_df.T.rename(columns={0: "Waarden"}), use_container_width=True)
+
+
+    st.markdown("### NaN-invulling per kolom") # Subkop
+    # De overzicht_df heeft nu 3 kolommen
+    st.dataframe(overzicht_df.head(20), use_container_width=True)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Rijen vóór outlier-filter", rows_before)
+    m2.metric("Rijen na outlier-filter", rows_after)
+    m3.metric("Verwijderd (outliers)", outliers_removed)
