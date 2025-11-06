@@ -12,8 +12,6 @@ import pickle
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
-from scipy.optimize import curve_fit
-import os
 
 st.set_page_config(page_title="Laadpalen, Laadsessies & Voertuigdata Nederland", layout="wide")
 
