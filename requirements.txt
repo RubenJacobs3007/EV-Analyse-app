@@ -7,6 +7,6 @@ streamlit-folium
 geopandas
 shapely
 requests
-pickle
 streamlit
 pathlib
+
