@@ -90,7 +90,7 @@ if pagina == "Voorpagina":
     Welkom op dit dashboard. Hier tonen we de oude en de nieuwe versie van onze case over laadpalen en elektrisch vervoer. In de nieuwe versie hebben we meer richting en samenhang aangebracht dan in de eerste.
 
     ## Verbeteringen
-    We hebben de case meer samenhang gegeven. Het doel is nu om te laten zien hoe het aantal elektrische auto’s de afgelopen jaren is gegroeid.
+    We hebben de case meer samenhang gegeven. Het doel is nu om de groei van Elektrische autos in Nederland te laten zien.
     ### Kaart
     Hier is een jaar selector toegevoegd bij de kaart en er is een grafiek die laat zien hoeveel laatpalen elk jaar zijn toegevoegd.
     ### Analyse van voertuigdata
@@ -1085,6 +1085,7 @@ elif pagina == "🚗👴 Analyse van voertuigdata (oud)":
     m1.metric("Rijen vóór outlier-filter", rows_before)
     m2.metric("Rijen na outlier-filter", rows_after)
     m3.metric("Verwijderd (outliers)", outliers_removed)
+
 
 
 
