@@ -9,4 +9,4 @@ shapely
 requests
 streamlit
 pathlib
-
+scipy
