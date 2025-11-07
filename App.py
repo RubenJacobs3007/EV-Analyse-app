@@ -488,8 +488,8 @@ elif pagina == "📊 Analyse van laadsessies":
         updatemenus=[dict(
             buttons=[
                 dict(label='Beide', method='update', args=[{'visible': [True, True]}]),
-                dict(label='Werkdagen', method='update', args=[{'visible': [True, False]}]),
-                dict(label='Weekend', method='update', args=[{'visible': [False, True]}]),
+                dict(label='Weekend', method='update', args=[{'visible': [True, False]}]),
+                dict(label='Werkdagen', method='update', args=[{'visible': [False, True]}]),
             ],
             direction='down', showactive=True, x=0.0, xanchor='left', y=1.15, yanchor='top'
         )]
@@ -1085,6 +1085,7 @@ elif pagina == "🚗👴 Analyse van voertuigdata (oud)":
     m1.metric("Rijen vóór outlier-filter", rows_before)
     m2.metric("Rijen na outlier-filter", rows_after)
     m3.metric("Verwijderd (outliers)", outliers_removed)
+
 
 
 
